@@ -1,41 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pro Virtual IDE</title>
+    <title>Pro IDE + Console</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
     <style>
-        :root { --bg: #282c34; --sidebar: #21252b; --border: #181a1f; --text: #abb2bf; --accent: #61afef; }
+        :root { --bg: #282c34; --sidebar: #21252b; --border: #181a1f; --text: #abb2bf; --accent: #61afef; --error: #e06c75; --warn: #d19a66; }
         body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 250px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
         
-        /* Sidebar & Tree */
         #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .tree-item { padding: 4px 10px; cursor: pointer; display: flex; align-items: center; font-size: 13px; gap: 8px; transition: 0.2s; }
-        .tree-item:hover { background: #2c313a; }
-        .tree-item.active { background: #3e4451; color: white; }
-        .tree-item .actions { margin-left: auto; display: none; gap: 5px; }
-        .tree-item:hover .actions { display: flex; }
-        .btn-icon { background: none; border: none; color: #5c6370; cursor: pointer; padding: 2px; }
-        .btn-icon:hover { color: white; }
-
-        /* Layout */
+        .tree-item { padding: 6px 10px; cursor: pointer; display: flex; align-items: center; font-size: 13px; gap: 8px; }
+        .tree-item.active { background: #3e4451; box-shadow: inset 3px 0 0 var(--accent); }
+        
         #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
         #monaco-editor { flex: 1; }
+        
+        /* Console Styles */
+        #console-area { height: 200px; background: #1e2127; border-top: 1px solid var(--border); overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; }
+        .log { padding: 4px 10px; border-bottom: 1px solid #2c313a; white-space: pre-wrap; }
+        .log-error { color: var(--error); background: rgba(224, 108, 117, 0.1); }
+        .log-warn { color: var(--warn); }
+        
         #preview-container { background: white; display: flex; flex-direction: column; }
         iframe { flex: 1; border: none; background: white; }
         
-        .toolbar { padding: 8px 12px; background: var(--sidebar); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #5c6370; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
-        .controls { padding: 10px; border-top: 1px solid var(--border); }
-        input { background: #1b1d23; border: 1px solid var(--border); color: white; padding: 4px 8px; width: calc(100% - 20px); margin-bottom: 5px; }
-        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 8px; width: 100%; font-weight: bold; cursor: pointer; border-radius: 2px; }
+        .toolbar { padding: 8px 12px; background: var(--sidebar); font-size: 11px; text-transform: uppercase; color: #5c6370; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 10px; width: 100%; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
     <div class="toolbar">Explorer</div>
-    <div id="fileTree" style="flex:1; overflow-y:auto; padding-top:10px;"></div>
-    <div class="controls">
-        <input type="text" id="pathInput" placeholder="folder/file.js">
+    <div id="fileTree" style="flex:1;"></div>
+    <div style="padding:10px">
+        <input type="text" id="pathInput" placeholder="path/to/file.js" style="width:90%; background:#1b1d23; border:1px solid var(--border); color:white; padding:5px; margin-bottom:5px;">
         <button class="run-btn" onclick="updatePreview()">▶ RUN PROJECT</button>
     </div>
 </div>
@@ -43,10 +41,12 @@
 <div id="editor-container">
     <div class="toolbar">Editor: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
     <div id="monaco-editor"></div>
+    <div class="toolbar">Console <span onclick="document.getElementById('console-area').innerHTML=''" style="cursor:pointer">[Clear]</span></div>
+    <div id="console-area"></div>
 </div>
 
 <div id="preview-container">
-    <div class="toolbar" style="background:#ddd; color:#333;">Live Preview</div>
+    <div class="toolbar" style="background:#eee; color:#333;">Preview</div>
     <iframe id="preview"></iframe>
 </div>
 
@@ -54,47 +54,23 @@
     let editor;
     let currentPath = 'index.html';
     let files = {
-        'index.html': '<html><head><link rel="stylesheet" href="style.css"></head><body><h1>One Dark IDE</h1><script src="js/app.js"><\/script></body></html>',
-        'style.css': 'body { background: #282c34; color: #abb2bf; font-family: sans-serif; text-align: center; padding-top: 50px; }',
-        'js/app.js': 'console.log("Nested file loaded!");'
+        'index.html': '<html><body><h1>Console Ready</h1><script src="app.js"><\/script></body></html>',
+        'app.js': 'console.log("System Online...");\nconsole.warn("Testing warnings");'
     };
 
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
     require(['vs/editor/editor.main'], function () {
-        // Define Atom One Dark Theme
         monaco.editor.defineTheme('one-dark', {
-            base: 'vs-dark',
-            inherit: true,
-            rules: [
-                { token: 'comment', foreground: '5c6370', fontStyle: 'italic' },
-                { token: 'keyword', foreground: 'c678dd' },
-                { token: 'identifier', foreground: '61afef' },
-                { token: 'string', foreground: '98c379' },
-                { token: 'number', foreground: 'd19a66' },
-                { token: 'type', foreground: 'e5c07b' }
-            ],
-            colors: {
-                'editor.background': '#282c34',
-                'editor.foreground': '#abb2bf',
-                'editorCursor.foreground': '#528bff',
-                'editor.lineHighlightBackground': '#2c313a',
-                'editorLineNumber.foreground': '#4b5263',
-                'editor.selectionBackground': '#3e4451',
-            }
+            base: 'vs-dark', inherit: true,
+            rules: [{ token: 'keyword', foreground: 'c678dd' }],
+            colors: { 'editor.background': '#282c34', 'editor.lineHighlightBackground': '#2c313a' }
         });
 
         editor = monaco.editor.create(document.getElementById('monaco-editor'), {
-            theme: 'one-dark',
-            automaticLayout: true,
-            fontSize: 14,
-            fontFamily: "'Fira Code', monospace",
-            minimap: { enabled: false }
+            theme: 'one-dark', automaticLayout: true, fontSize: 14, minimap: { enabled: false }
         });
 
-        editor.onDidChangeModelContent(() => {
-            files[currentPath] = editor.getValue();
-        });
-
+        editor.onDidChangeModelContent(() => { files[currentPath] = editor.getValue(); });
         renderTree();
         loadFile('index.html');
     });
@@ -102,24 +78,10 @@
     function renderTree() {
         const tree = document.getElementById('fileTree');
         tree.innerHTML = '';
-        
-        // Sort paths alphabetically
-        const paths = Object.keys(files).sort();
-        
-        paths.forEach(path => {
+        Object.keys(files).forEach(path => {
             const div = document.createElement('div');
             div.className = `tree-item ${path === currentPath ? 'active' : ''}`;
-            
-            // Icon logic (simplified)
-            const icon = path.includes('/') ? '📁' : '📄';
-            
-            div.innerHTML = `
-                <span>${icon} ${path}</span>
-                <div class="actions">
-                    <button class="btn-icon" onclick="renameFile('${path}', event)">✎</button>
-                    <button class="btn-icon" onclick="deleteFile('${path}', event)">×</button>
-                </div>
-            `;
+            div.innerHTML = `<span>📄 ${path}</span>`;
             div.onclick = () => loadFile(path);
             tree.appendChild(div);
         });
@@ -130,57 +92,40 @@
         document.getElementById('currentPath').textContent = path;
         const ext = path.split('.').pop();
         const lang = { js: 'javascript', html: 'html', css: 'css' }[ext] || 'plaintext';
-        
         const model = monaco.editor.createModel(files[path], lang);
         editor.setModel(model);
         renderTree();
     }
 
-    function addTextFile() {
-        const path = document.getElementById('pathInput').value;
-        if (path && !files[path]) {
-            files[path] = '// New file at ' + path;
-            renderTree();
-            loadFile(path);
-            document.getElementById('pathInput').value = '';
-        }
-    }
-
-    function deleteFile(path, e) {
-        e.stopPropagation();
-        if (confirm(`Delete ${path}?`)) {
-            delete files[path];
-            const keys = Object.keys(files);
-            if (currentPath === path) loadFile(keys[0] || '');
-            renderTree();
-        }
-    }
-
-    function renameFile(path, e) {
-        e.stopPropagation();
-        const newName = prompt("Rename to:", path);
-        if (newName && newName !== path) {
-            files[newName] = files[path];
-            delete files[path];
-            if (currentPath === path) currentPath = newName;
-            renderTree();
-            loadFile(currentPath);
-        }
-    }
-
     async function updatePreview() {
         if (!navigator.serviceWorker.controller) return;
         navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files });
-        document.getElementById('preview').src = `./virtual-project/index.html?t=${Date.now()}`;
+        
+        const iframe = document.getElementById('preview');
+        iframe.src = `./virtual-project/index.html?t=${Date.now()}`;
+
+        iframe.onload = () => {
+            const win = iframe.contentWindow;
+            ['log', 'error', 'warn'].forEach(type => {
+                const original = win.console[type];
+                win.console[type] = (...args) => {
+                    logToUI(args.join(' '), type);
+                    original.apply(win.console, args);
+                };
+            });
+        };
+    }
+
+    function logToUI(msg, type) {
+        const area = document.getElementById('console-area');
+        const div = document.createElement('div');
+        div.className = `log log-${type}`;
+        div.textContent = `> ${msg}`;
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight;
     }
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-    
-    // Allow "Enter" to add files
-    document.getElementById('pathInput').addEventListener('keypress', e => {
-        if (e.key === 'Enter') addTextFile();
-    });
 </script>
-
 </body>
 </html>
