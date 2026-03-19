@@ -1,59 +1,113 @@
 <!DOCTYPE html>
 <html>
+<head>
+    <style>
+        body { font-family: sans-serif; display: grid; grid-template-columns: 250px 1fr; height: 100vh; margin: 0; }
+        #sidebar { background: #252526; color: white; padding: 10px; }
+        #editor-container { display: flex; flex-direction: column; }
+        textarea { flex: 1; background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 15px; border: none; resize: none; }
+        #preview-pane { border-left: 5px solid #333; background: white; }
+        .file-item { cursor: pointer; padding: 5px; border-bottom: 1px solid #333; }
+        .file-item:hover { background: #37373d; }
+        button { width: 100%; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
 <body>
-  <h2>Mini IDE Previewer</h2>
-  <button onclick="updatePreview()">Run Code</button>
-  
-  <div style="display: flex; gap: 10px;">
-    <textarea id="htmlCode" rows="10" cols="30">
-<html>
-  <head><link rel="stylesheet" href="style.css"></head>
-  <body>
-    <h1>Hello World</h1>
-    <script src="app.js"></script>
-  </body>
-</html></textarea>
 
-    <textarea id="jsCode" rows="10" cols="30">
-console.log('Script running from virtual file!');
-document.body.style.backgroundColor = 'lightblue';</textarea>
+<div id="sidebar">
+    <h3>Files</h3>
+    <div id="fileList"></div>
+    <input type="text" id="newFileName" placeholder="filename.js" style="width: 80%">
+    <button onclick="addTextFile()">+ Add Text File</button>
+    <hr>
+    <label>Add Image:</label>
+    <input type="file" id="imageInput" onchange="addImageFile()" accept="image/*">
+    <hr>
+    <button onclick="updatePreview()" style="background: green; color: white; padding: 10px;">🚀 RUN</button>
+</div>
 
-    <textarea id="cssCode" rows="10" cols="30">
-h1 { color: darkblue; font-family: sans-serif; }</textarea>
-  </div>
+<div id="editor-container">
+    <h4 id="currentFileName" style="margin: 5px; color: #666;">Select a file</h4>
+    <textarea id="editor" oninput="saveCurrentFile()"></textarea>
+    <iframe id="preview" src="about:blank" style="height: 40%; border: none; border-top: 5px solid #333;"></iframe>
+</div>
 
-  <hr>
-  <iframe id="preview" src="about:blank" width="100%" height="300px"></iframe>
+<script>
+    let files = {
+        'index.html': '<html>\n<head>\n <link rel="stylesheet" href="style.css">\n</head>\n<body>\n <h1>Hello!</h1>\n <img src="logo.png" width="100">\n <script type="module" src="app.js"><\/script>\n</body>\n</html>',
+        'style.css': 'body { background: #222; color: gold; text-align: center; }',
+        'app.js': 'import { message } from "./utils.js";\nconsole.log(message);',
+        'utils.js': 'export const message = "Hello from a Module!";'
+    };
 
-  <script>
-    // 1. Register the Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').then(() => {
-        console.log('Service Worker Registered');
-      });
+    let currentFile = 'index.html';
+
+    function renderFileList() {
+        const list = document.getElementById('fileList');
+        list.innerHTML = '';
+        Object.keys(files).forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'file-item';
+            div.textContent = name;
+            div.onclick = () => loadFile(name);
+            list.appendChild(div);
+        });
+    }
+
+    function loadFile(name) {
+        currentFile = name;
+        document.getElementById('currentFileName').textContent = name;
+        const content = files[name];
+        const editor = document.getElementById('editor');
+        
+        if (content instanceof Blob) {
+            editor.value = "[Binary Image Data]";
+            editor.disabled = true;
+        } else {
+            editor.value = content;
+            editor.disabled = false;
+        }
+    }
+
+    function saveCurrentFile() {
+        if (!(files[currentFile] instanceof Blob)) {
+            files[currentFile] = document.getElementById('editor').value;
+        }
+    }
+
+    function addTextFile() {
+        const name = document.getElementById('newFileName').value;
+        if (name && !files[name]) {
+            files[name] = '// New file';
+            renderFileList();
+            loadFile(name);
+        }
+    }
+
+    async function addImageFile() {
+        const input = document.getElementById('imageInput');
+        const file = input.files[0];
+        if (file) {
+            // We store the actual file object (which is a Blob)
+            files[file.name] = file; 
+            renderFileList();
+            alert(`Added ${file.name}. You can now use <img src="${file.name}">`);
+        }
     }
 
     async function updatePreview() {
-      const files = {
-        'index.html': document.getElementById('htmlCode').value,
-        'app.js': document.getElementById('jsCode').value,
-        'style.css': document.getElementById('cssCode').value
-      };
-
-      // 2. Send the files to the Service Worker
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'UPDATE_FILES',
-          files: files
-        });
-
-        // 3. Load the "fake" URL into the iframe
-        // We add a timestamp to force the iframe to reload properly
-        document.getElementById('preview').src = `./virtual-project/index.html?t=${Date.now()}`;
-      } else {
-        alert("Service Worker not ready. Please refresh the page.");
-      }
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files });
+            document.getElementById('preview').src = `./virtual-project/index.html?t=${Date.now()}`;
+        }
     }
-  </script>
+
+    // Init
+    navigator.serviceWorker.register('sw.js').then(() => {
+        renderFileList();
+        loadFile('index.html');
+    });
+</script>
+
 </body>
 </html>
