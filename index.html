@@ -1,53 +1,77 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <title>Monaco Virtual IDE with Console</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
     <style>
-        body { font-family: sans-serif; display: grid; grid-template-columns: 250px 1fr; height: 100vh; margin: 0; }
-        #sidebar { background: #252526; color: white; padding: 10px; }
-        #editor-container { display: flex; flex-direction: column; }
-        textarea { flex: 1; background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 15px; border: none; resize: none; }
-        #preview-pane { border-left: 5px solid #333; background: white; }
-        .file-item { cursor: pointer; padding: 5px; border-bottom: 1px solid #333; }
-        .file-item:hover { background: #37373d; }
-        button { width: 100%; margin-top: 10px; cursor: pointer; }
+        body { font-family: -apple-system, sans-serif; display: grid; grid-template-columns: 200px 1fr 1fr; height: 100vh; margin: 0; background: #1e1e1e; color: white; overflow: hidden; }
+        #sidebar { border-right: 1px solid #333; padding: 10px; display: flex; flex-direction: column; }
+        #editor-container { position: relative; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        #preview-container { background: white; display: flex; flex-direction: column; color: black; }
+        
+        /* Console Styles */
+        #console-log { height: 150px; background: #252526; color: #ccc; font-family: monospace; font-size: 12px; overflow-y: auto; border-top: 2px solid #333; padding: 5px; }
+        .log-entry { border-bottom: 1px solid #333; padding: 2px 5px; white-space: pre-wrap; }
+        .log-error { color: #ff5555; background: rgba(255,0,0,0.1); }
+        .log-warn { color: #ffb86c; }
+
+        iframe { flex: 1; border: none; width: 100%; background: white; }
+        .file-item { cursor: pointer; padding: 8px; font-size: 13px; border-radius: 4px; }
+        .file-item.active { background: #37373d; box-shadow: inset 3px 0 0 #007acc; }
+        button { background: #007acc; color: white; border: none; padding: 8px; cursor: pointer; margin: 5px 0; }
+        input { background: #3c3c3c; border: 1px solid #555; color: white; padding: 5px; margin-bottom: 5px; width: 90%; }
+        .toolbar { padding: 5px; background: #252526; font-size: 12px; color: #888; border-bottom: 1px solid #333; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <h3>Files</h3>
+    <div style="font-weight: bold; margin-bottom: 10px;">EXPLORER</div>
     <div id="fileList"></div>
-    <input type="text" id="newFileName" placeholder="filename.js" style="width: 80%">
-    <button onclick="addTextFile()">+ Add Text File</button>
-    <hr>
-    <label>Add Image:</label>
-    <input type="file" id="imageInput" onchange="addImageFile()" accept="image/*">
-    <hr>
-    <button onclick="updatePreview()" style="background: green; color: white; padding: 10px;">🚀 RUN</button>
+    <input type="text" id="newFileName" placeholder="script.js">
+    <button onclick="addTextFile()">+ New File</button>
+    <button onclick="updatePreview()" style="background: #28a745; margin-top: 10px;">▶ Run Code</button>
+    <button onclick="document.getElementById('console-log').innerHTML = ''" style="background: #444;">Clear Console</button>
 </div>
 
 <div id="editor-container">
-    <h4 id="currentFileName" style="margin: 5px; color: #666;">Select a file</h4>
-    <textarea id="editor" oninput="saveCurrentFile()"></textarea>
-    <iframe id="preview" src="about:blank" style="height: 40%; border: none; border-top: 5px solid #333;"></iframe>
+    <div class="toolbar">EDITOR: <span id="currentFileName">index.html</span></div>
+    <div id="monaco-editor" style="flex: 1;"></div>
+    <div class="toolbar">CONSOLE</div>
+    <div id="console-log"></div>
+</div>
+
+<div id="preview-container">
+    <div class="toolbar" style="background: #ddd; color: #333;">PREVIEW</div>
+    <iframe id="preview"></iframe>
 </div>
 
 <script>
+    let editor;
+    let currentFile = 'index.html';
     let files = {
-        'index.html': '<html>\n<head>\n <link rel="stylesheet" href="style.css">\n</head>\n<body>\n <h1>Hello!</h1>\n <img src="logo.png" width="100">\n <script type="module" src="app.js"><\/script>\n</body>\n</html>',
-        'style.css': 'body { background: #222; color: gold; text-align: center; }',
-        'app.js': 'import { message } from "./utils.js";\nconsole.log(message);',
-        'utils.js': 'export const message = "Hello from a Module!";'
+        'index.html': { content: '<html><body>\n<h1>Console Test</h1>\n<script src="app.js"><\/script>\n</body></html>', lang: 'html' },
+        'app.js': { content: 'console.log("Hello from the virtual world!");\nconsole.error("This is an error test.");\nconsole.warn("And a warning.");', lang: 'javascript' }
     };
 
-    let currentFile = 'index.html';
+    // 1. Setup Monaco
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+        editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+            theme: 'vs-dark', automaticLayout: true, fontSize: 14
+        });
+        editor.onDidChangeModelContent(() => { if(files[currentFile]) files[currentFile].content = editor.getValue(); });
+        renderFileList();
+        loadFile('index.html');
+    });
 
+    // 2. File Management
     function renderFileList() {
         const list = document.getElementById('fileList');
         list.innerHTML = '';
         Object.keys(files).forEach(name => {
             const div = document.createElement('div');
-            div.className = 'file-item';
+            div.className = `file-item ${name === currentFile ? 'active' : ''}`;
             div.textContent = name;
             div.onclick = () => loadFile(name);
             list.appendChild(div);
@@ -56,58 +80,60 @@
 
     function loadFile(name) {
         currentFile = name;
+        renderFileList();
+        const model = monaco.editor.createModel(files[name].content, files[name].lang);
+        editor.setModel(model);
         document.getElementById('currentFileName').textContent = name;
-        const content = files[name];
-        const editor = document.getElementById('editor');
-        
-        if (content instanceof Blob) {
-            editor.value = "[Binary Image Data]";
-            editor.disabled = true;
-        } else {
-            editor.value = content;
-            editor.disabled = false;
-        }
-    }
-
-    function saveCurrentFile() {
-        if (!(files[currentFile] instanceof Blob)) {
-            files[currentFile] = document.getElementById('editor').value;
-        }
     }
 
     function addTextFile() {
         const name = document.getElementById('newFileName').value;
         if (name && !files[name]) {
-            files[name] = '// New file';
+            const ext = name.split('.').pop();
+            const lang = ext === 'js' ? 'javascript' : ext === 'css' ? 'css' : 'html';
+            files[name] = { content: '', lang };
             renderFileList();
             loadFile(name);
         }
     }
 
-    async function addImageFile() {
-        const input = document.getElementById('imageInput');
-        const file = input.files[0];
-        if (file) {
-            // We store the actual file object (which is a Blob)
-            files[file.name] = file; 
-            renderFileList();
-            alert(`Added ${file.name}. You can now use <img src="${file.name}">`);
-        }
-    }
-
+    // 3. The Preview and Console Hook
     async function updatePreview() {
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files });
-            document.getElementById('preview').src = `./virtual-project/index.html?t=${Date.now()}`;
-        }
+        if (!navigator.serviceWorker.controller) return alert("Refresh page to activate Service Worker");
+
+        const flatFiles = {};
+        for (const [name, data] of Object.entries(files)) flatFiles[name] = data.content;
+        
+        navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files: flatFiles });
+
+        const iframe = document.getElementById('preview');
+        iframe.src = `./virtual-project/index.html?t=${Date.now()}`;
+
+        // Wait for iframe to load, then hijack its console
+        iframe.onload = () => {
+            const win = iframe.contentWindow;
+            
+            // Standard console methods to override
+            ['log', 'error', 'warn'].forEach(type => {
+                const original = win.console[type];
+                win.console[type] = (...args) => {
+                    addToConsole(args.join(' '), type);
+                    original.apply(win.console, args);
+                };
+            });
+        };
     }
 
-    // Init
-    navigator.serviceWorker.register('sw.js').then(() => {
-        renderFileList();
-        loadFile('index.html');
-    });
-</script>
+    function addToConsole(msg, type) {
+        const logWin = document.getElementById('console-log');
+        const div = document.createElement('div');
+        div.className = `log-entry log-${type}`;
+        div.textContent = `> ${msg}`;
+        logWin.appendChild(div);
+        logWin.scrollTop = logWin.scrollHeight; // Auto-scroll
+    }
 
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
 </body>
 </html>
