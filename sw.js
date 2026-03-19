@@ -1,34 +1,40 @@
-// sw.js
 let virtualFiles = {};
 
-// Listen for files sent from the main UI
 self.addEventListener('message', (event) => {
   if (event.data.type === 'UPDATE_FILES') {
     virtualFiles = event.data.files;
-    console.log('Service Worker: Files Updated');
   }
 });
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // We only intercept requests going to our "fake" folder
   if (url.pathname.includes('/virtual-project/')) {
-    const fileName = url.pathname.split('/').pop() || 'index.html';
-    const content = virtualFiles[fileName];
+    // Extract filename (e.g., "scripts/main.js")
+    const parts = url.pathname.split('/virtual-project/');
+    const fileName = parts[1] || 'index.html';
+    
+    const fileData = virtualFiles[fileName];
 
-    if (content !== undefined) {
-      // Determine MIME type based on extension
-      const extension = fileName.split('.').pop();
+    if (fileData) {
+      const extension = fileName.split('.').pop().toLowerCase();
       const mimeTypes = {
-          'html': 'text/html',
-          'js': 'text/javascript',
-          'css': 'text/css',
-          'json': 'application/json'
+        'html': 'text/html',
+        'js': 'text/javascript',
+        'css': 'text/css',
+        'png': 'image/png',
+        'jpg': 'image/jpeg',
+        'svg': 'image/svg+xml'
       };
 
+      // Handle binary files (images) vs text files
+      let body = fileData;
+      if (fileData instanceof Blob) {
+          body = fileData;
+      }
+
       event.respondWith(
-        new Response(content, {
+        new Response(body, {
           headers: { 'Content-Type': mimeTypes[extension] || 'text/plain' }
         })
       );
@@ -38,6 +44,5 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Force the SW to take control immediately
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));
