@@ -1,51 +1,65 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Virtual IDE</title>
+    <title>Pro Virtual IDE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+
     <style>
         :root { --bg: #282c34; --sidebar: #21252b; --border: #181a1f; --text: #abb2bf; --accent: #61afef; }
-        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 260px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
+        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 280px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
         
+        /* Sidebar */
         #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .folder { font-weight: bold; color: #d19a66; padding: 4px 10px; font-size: 13px; }
-        .file { padding: 4px 25px; cursor: pointer; font-size: 13px; white-space: nowrap; }
-        .file:hover { background: #2c313a; }
-        .file.active { background: #3e4451; color: var(--accent); }
+        #jstree-container { flex: 1; overflow: auto; padding: 10px; font-size: 13px; }
         
+        /* Editor */
         #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
         #monaco-editor { flex: 1; }
-        #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; font-family: monospace; padding: 5px; }
-        #preview-container { background: white; display: flex; flex-direction: column; }
+        #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; font-family: monospace; padding: 10px; color: #abb2bf; font-size: 12px; }
+
+        /* Preview / Browser UI */
+        #preview-container { background: white; display: flex; flex-direction: column; height: 100%; }
+        .browser-bar { background: #eee; padding: 5px 10px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid #ccc; }
+        .address-input { flex: 1; padding: 4px 10px; border: 1px solid #ccc; border-radius: 20px; font-size: 12px; font-family: monospace; }
         iframe { flex: 1; border: none; background: white; }
+
+        /* Toolbars & Buttons */
+        .toolbar { padding: 8px 12px; background: var(--sidebar); font-size: 11px; text-transform: uppercase; color: #5c6370; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 8px 15px; font-weight: bold; cursor: pointer; border-radius: 3px; margin: 10px; }
+        .external-link { color: var(--accent); text-decoration: none; border: 1px solid var(--accent); padding: 2px 6px; border-radius: 3px; font-weight: bold; cursor: pointer; font-size: 10px; }
         
-        .toolbar { padding: 8px; background: var(--sidebar); font-size: 11px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
-        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 8px 15px; font-weight: bold; cursor: pointer; border-radius: 3px; }
-        .external-link { color: var(--accent); text-decoration: none; font-size: 10px; border: 1px solid var(--accent); padding: 2px 5px; border-radius: 3px; }
+        input[type="text"]#pathInput { background: #1b1d23; border: 1px solid var(--border); color: white; padding: 6px; width: calc(100% - 22px); margin: 0 10px; }
+
+        /* One Dark jsTree overrides */
+        .jstree-default .jstree-clicked { background: #3e4451 !important; border-radius: 3px; box-shadow: none !important; color: white !important; }
+        .jstree-default .jstree-hovered { background: #2c313a !important; border-radius: 3px; box-shadow: none !important; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div class="toolbar">FILES</div>
-    <div id="fileTree" style="flex:1; overflow-y:auto; padding-top:10px;"></div>
-    <div style="padding:10px; border-top:1px solid var(--border)">
-        <input type="text" id="pathInput" placeholder="folder/file.js" style="width:90%; background:#1b1d23; border:1px solid var(--border); color:white; padding:5px; margin-bottom:10px;">
-        <button class="run-btn" onclick="updatePreview()">▶ RUN PROJECT</button>
-    </div>
+    <div class="toolbar">Explorer</div>
+    <div id="jstree-container"></div>
+    <input type="text" id="pathInput" placeholder="new-folder/file.js">
+    <button class="run-btn" onclick="updatePreview()">▶ RUN PROJECT</button>
 </div>
 
 <div id="editor-container">
-    <div class="toolbar">EDITOR: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
+    <div class="toolbar">Editor: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
     <div id="monaco-editor"></div>
-    <div class="toolbar">CONSOLE</div>
+    <div class="toolbar">Console</div>
     <div id="console-area"></div>
 </div>
 
 <div id="preview-container">
-    <div class="toolbar" style="background:#eee; color:#333;">
-        LIVE PREVIEW
-        <a id="openTab" target="_blank" class="external-link">OPEN IN NEW TAB ↗</a>
+    <div class="browser-bar">
+        <button onclick="updatePreview()" style="background:none; border:none; cursor:pointer;">🔄</button>
+        <span style="font-size: 11px; color: #666; font-weight: bold;">/virtual-project/</span>
+        <input type="text" id="browserAddress" class="address-input" value="index.html">
+        <span onclick="previewInNewTab()" class="external-link">NEW TAB ↗</span>
     </div>
     <iframe id="preview"></iframe>
 </div>
@@ -53,12 +67,14 @@
 <script>
     let editor;
     let currentPath = 'index.html';
+    let childWindow = null;
     let files = {
-        'index.html': '<html><body><h1>Recursive Tree</h1><script src="js/main.js"><\/script></body></html>',
-        'js/main.js': 'console.log("Deep file loaded!");\nconsole.log("Check the console immediately!");',
-        'css/style.css': 'body { background: #282c34; }'
+        'index.html': '<html><head><link rel="stylesheet" href="style.css"></head><body>\n  <h1>Virtual Browser</h1>\n  <p>Try typing "style.css" or "js/app.js" in the address bar above.</p>\n  <script src="js/app.js"><\/script>\n</body></html>',
+        'style.css': 'body { background: #f0f0f0; font-family: sans-serif; padding: 40px; text-align: center; } h1 { color: #61afef; }',
+        'js/app.js': 'console.log("App loaded successfully!");'
     };
 
+    // 1. Monaco Setup
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
     require(['vs/editor/editor.main'], function () {
         monaco.editor.defineTheme('one-dark', {
@@ -66,80 +82,87 @@
             rules: [{ token: 'keyword', foreground: 'c678dd' }],
             colors: { 'editor.background': '#282c34', 'editor.lineHighlightBackground': '#2c313a' }
         });
-        editor = monaco.editor.create(document.getElementById('monaco-editor'), { theme: 'one-dark', automaticLayout: true, fontSize: 14 });
+        editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+            theme: 'one-dark', automaticLayout: true, fontSize: 14, minimap: { enabled: false }
+        });
         editor.onDidChangeModelContent(() => { files[currentPath] = editor.getValue(); });
-        renderTree();
+        
+        initTree();
         loadFile('index.html');
     });
 
-    // RECURSIVE TREE LOGIC
-    function renderTree() {
-        const treeElement = document.getElementById('fileTree');
-        treeElement.innerHTML = '';
-        const structure = {};
-
-        // Convert flat paths to nested object
+    // 2. jsTree Setup
+    function initTree() {
+        const treeData = [];
         Object.keys(files).forEach(path => {
-            const parts = path.split('/');
-            let current = structure;
+            let parts = path.split('/');
+            let parent = "#";
             parts.forEach((part, i) => {
-                if (i === parts.length - 1) current[part] = path;
-                else {
-                    current[part] = current[part] || {};
-                    current = current[part];
+                let id = parts.slice(0, i + 1).join('/');
+                let isLast = i === parts.length - 1;
+                if (!treeData.find(n => n.id === id)) {
+                    treeData.push({
+                        id: id, parent: parent, text: part,
+                        type: isLast ? 'file' : 'folder',
+                        isLeaf: isLast
+                    });
                 }
+                parent = id;
             });
         });
 
-        const buildHTML = (obj, container) => {
-            Object.keys(obj).sort().forEach(key => {
-                const val = obj[key];
-                if (typeof val === 'string') {
-                    const el = document.createElement('div');
-                    el.className = `file ${val === currentPath ? 'active' : ''}`;
-                    el.textContent = '📄 ' + key;
-                    el.onclick = () => loadFile(val);
-                    container.appendChild(el);
-                } else {
-                    const folderEl = document.createElement('div');
-                    folderEl.className = 'folder';
-                    folderEl.textContent = '📁 ' + key;
-                    container.appendChild(folderEl);
-                    const subContainer = document.createElement('div');
-                    subContainer.style.marginLeft = '10px';
-                    container.appendChild(subContainer);
-                    buildHTML(val, subContainer);
-                }
-            });
-        };
-        buildHTML(structure, treeElement);
+        $('#jstree-container').jstree('destroy').jstree({
+            'core': { 'data': treeData, 'check_callback': true, 'themes': { 'dots': false, 'variant': 'large' } },
+            'plugins': ["types", "wholerow"],
+            'types': { 'file': { 'icon': 'jstree-file' }, 'folder': { 'icon': 'jstree-folder' } }
+        }).on('select_node.jstree', (e, data) => {
+            if (data.node.original.isLeaf) loadFile(data.node.id);
+        });
     }
 
     function loadFile(path) {
         currentPath = path;
+        document.getElementById('currentPath').textContent = path;
         const ext = path.split('.').pop();
         const lang = { js: 'javascript', html: 'html', css: 'css' }[ext] || 'plaintext';
         editor.setModel(monaco.editor.createModel(files[path], lang));
-        document.getElementById('currentPath').textContent = path;
-        renderTree();
     }
 
+    // 3. Preview & Address Bar Logic
     async function updatePreview() {
-        if (!navigator.serviceWorker.controller) return;
-        navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files });
+        if (!navigator.serviceWorker.controller) return alert("Refresh to active SW");
         
-        const timestamp = Date.now();
-        const url = `./virtual-project/index.html?t=${timestamp}`;
+        // Sync files to SW
+        navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files });
+
+        const path = document.getElementById('browserAddress').value;
+        const url = `./virtual-project/${path}?t=${Date.now()}`;
+        
         document.getElementById('preview').src = url;
-        document.getElementById('openTab').href = url;
+        if (childWindow && !childWindow.closed) childWindow.location.href = url;
     }
 
-    // Capture logs via postMessage (sent by the SW-injected script)
+    function previewInNewTab() {
+        const path = document.getElementById('browserAddress').value;
+        const url = `./virtual-project/${path}?t=${Date.now()}`;
+        childWindow = window.open(url, 'VirtualPreview', 'width=1000,height=800');
+    }
+
+    // Enter Key listener for address bar
+    document.getElementById('browserAddress').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') updatePreview();
+    });
+
+    window.addEventListener('beforeunload', () => { if (childWindow) childWindow.close(); });
+
+    // 4. Console Logic
     window.addEventListener('message', e => {
         if (e.data.type === 'CONSOLE_LOG') {
             const area = document.getElementById('console-area');
             const div = document.createElement('div');
             div.style.color = e.data.logType === 'error' ? '#e06c75' : e.data.logType === 'warn' ? '#d19a66' : '#abb2bf';
+            div.style.padding = '2px 5px';
+            div.style.borderBottom = '1px solid #2c313a';
             div.textContent = `> [${e.data.logType}] ${e.data.msg}`;
             area.appendChild(div);
             area.scrollTop = area.scrollHeight;
