@@ -10,14 +10,14 @@
 
     <style>
         :root { 
-            --bg: #1e1e1e; /* VS Code dark background */
+            --bg: #1e1e1e; 
             --sidebar: #252526; 
             --border: #333333; 
             --text: #cccccc; 
-            --accent: #0e639c; /* VS Code blue */
+            --accent: #0e639c; 
             --hover: #2a2d2e; 
             --select: #37373d;
-            --tab-bg: #2d2d2d;
+            --unsynced: #d7ba7d; /* VS Code yellow/orange */
         }
         
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: grid; grid-template-columns: 250px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
@@ -26,9 +26,8 @@
         #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
         #jstree-container { flex: 1; overflow: auto; padding: 10px 0; font-size: 13px; background: var(--sidebar); }
         
-        /* VS Code Style overrides for jsTree */
         .jstree-default .jstree-node { margin-left: 12px; }
-        .jstree-default .jstree-icon { background-image: none !important; } /* Hide default sprites */
+        .jstree-default .jstree-icon { background-image: none !important; } 
         .jstree-default .jstree-ocl { font-family: monospace; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #6b717d; transition: transform 0.1s; }
         .jstree-default .jstree-closed > .jstree-ocl::before { content: '▶'; }
         .jstree-default .jstree-open > .jstree-ocl::before { content: '▼'; }
@@ -37,12 +36,17 @@
         .jstree-default .jstree-clicked { background: var(--select) !important; box-shadow: none !important; color: #ffffff !important; border-radius: 0; }
         .jstree-default .jstree-themeicon { margin-right: 6px; font-size: 14px; text-align: center; }
 
+        /* Custom Context Menu Styling */
+        .vakata-context { background: #252526 !important; border: 1px solid #454545 !important; border-radius: 4px !important; box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important; padding: 4px 0 !important; }
+        .vakata-context li > a { color: #cccccc !important; padding: 6px 20px !important; font-family: 'Segoe UI', sans-serif; font-size: 13px; }
+        .vakata-context li > a:hover { background: #04395e !important; color: white !important; text-shadow: none !important; border: none !important;}
+        .vakata-context .vakata-context-separator a { background: #454545 !important; border: none !important; margin: 4px 0 !important; }
+
         /* Editor Area */
         #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); min-width: 0; }
         .editor-tabs { background: var(--sidebar); display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
         .editor-tab { background: var(--bg); padding: 8px 16px; font-size: 13px; color: #fff; border-top: 1px solid var(--accent); cursor: pointer; }
-        
-        #monaco-editor { flex: 1; min-height: 0; } /* min-height 0 fixes flexbox overflow issues */
+        #monaco-editor { flex: 1; min-height: 0; } 
         
         /* Console */
         #console-area { height: 200px; background: #1e1e1e; border-top: 1px solid var(--border); overflow-y: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; padding-bottom: 10px; }
@@ -61,9 +65,11 @@
         .action-btn { cursor: pointer; color: #4daafc; font-weight: normal; font-size: 12px; text-transform: none; }
         .action-btn:hover { color: #82c4fb; }
         
-        .run-btn { background: var(--accent); color: white; border: none; padding: 8px; margin: 10px; font-size: 12px; cursor: pointer; border-radius: 2px; transition: 0.1s; display: flex; justify-content: center; align-items: center; gap: 6px; }
+        .run-btn { background: var(--accent); color: white; border: none; padding: 8px; margin: 10px; font-size: 12px; cursor: pointer; border-radius: 2px; transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 6px; }
         .run-btn:hover { background: #1177bb; }
         .run-btn:active { transform: scale(0.98); }
+        .run-btn.unsynced { background: var(--unsynced); color: #1e1e1e; font-weight: bold; }
+        .run-btn.unsynced:hover { background: #e8c682; }
 
         /* Scrollbars */
         ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -77,9 +83,9 @@
 <div id="sidebar">
     <div class="toolbar">Explorer</div>
     <div id="jstree-container"></div>
-    <button class="run-btn" onclick="updatePreview()">
+    <button id="run-btn" class="run-btn" onclick="updatePreview()">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l9 5.5-9 5.5v-11z"/></svg>
-        Run Project
+        <span>Run Project</span>
     </button>
 </div>
 
@@ -107,48 +113,62 @@
 <script>
     let editor, childWindow;
     let currentPath = 'index.html';
+    let unsyncedChanges = false;
     
-    // Initial Virtual Files
-    let files = {
-        'index.html': '<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: sans-serif; text-align: center; margin-top: 50px; }\n    h1 { color: #333; }\n  </style>\n</head>\n<body>\n  <h1>Virtual IDE Running! 🚀</h1>\n  <script src="app.js"><\/script>\n</body>\n</html>',
-        'app.js': 'console.log("System Sync Complete.");\nconsole.warn("This is a simulated warning.");'
+    // Default files if none are saved
+    const defaultFiles = {
+        'index.html': '<!DOCTYPE html>\n<html>\n<head>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Virtual IDE Running! 🚀</h1>\n  <p>Right-click the sidebar to add files.</p>\n  <script src="app.js"><\/script>\n</body>\n</html>',
+        'app.js': 'console.log("System Sync Complete.");',
+        'style.css': 'body {\n  font-family: sans-serif;\n  text-align: center;\n  margin-top: 50px;\n  color: #333;\n}'
     };
+
+    // Load from LocalStorage or use defaults
+    let files = JSON.parse(localStorage.getItem('virtual_ide_files')) || defaultFiles;
+
+    function saveToLocal() {
+        localStorage.setItem('virtual_ide_files', JSON.stringify(files));
+        unsyncedChanges = true;
+        document.getElementById('run-btn').classList.add('unsynced');
+        document.querySelector('#run-btn span').textContent = "Run Project (Unsynced)";
+    }
+
+    // --- Keyboard Shortcuts ---
+    document.addEventListener('keydown', e => {
+        // Ctrl+S or Cmd+S
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            updatePreview();
+        }
+    });
 
     // --- Editor Initialization ---
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
     require(['vs/editor/editor.main'], function () {
-        // Customize the dark theme slightly to match VS Code perfectly
         monaco.editor.defineTheme('vscode-dark', {
-            base: 'vs-dark', inherit: true,
-            rules: [],
-            colors: { 
-                'editor.background': '#1e1e1e', 
-                'editor.lineHighlightBackground': '#2a2d2e',
-                'editorLineNumber.foreground': '#858585'
-            }
+            base: 'vs-dark', inherit: true, rules: [],
+            colors: { 'editor.background': '#1e1e1e', 'editor.lineHighlightBackground': '#2a2d2e', 'editorLineNumber.foreground': '#858585' }
         });
         
         editor = monaco.editor.create(document.getElementById('monaco-editor'), { 
-            theme: 'vscode-dark', 
-            automaticLayout: true,
-            minimap: { enabled: false },
-            fontSize: 14,
-            fontFamily: "'Fira Code', 'Consolas', monospace"
+            theme: 'vscode-dark', automaticLayout: true, minimap: { enabled: false }, fontSize: 14, fontFamily: "'Fira Code', 'Consolas', monospace"
         });
         
-        editor.onDidChangeModelContent(() => { files[currentPath] = editor.getValue(); });
+        editor.onDidChangeModelContent(() => { 
+            files[currentPath] = editor.getValue(); 
+            saveToLocal();
+        });
         
         renderTree();
-        loadFile('index.html');
+        if (files['index.html'] !== undefined) {
+            loadFile('index.html');
+        } else {
+            loadFile(Object.keys(files)[0] || ''); // Load first available file
+        }
         
-        // Auto-run once editor loads
         setTimeout(updatePreview, 500); 
     });
 
-    // Make sure Monaco resizes correctly if the window is adjusted
-    window.addEventListener('resize', () => {
-        if (editor) editor.layout();
-    });
+    window.addEventListener('resize', () => { if (editor) editor.layout(); });
 
     // --- File Tree Logic ---
     function getFileIcon(filename) {
@@ -171,7 +191,7 @@
             };
         });
         
-        // Ensure parent folders exist
+        // Ensure parent folders exist visually
         Object.keys(files).forEach(path => {
             let parts = path.split('/').filter(Boolean);
             for(let i=0; i<parts.length-1; i++) {
@@ -183,25 +203,114 @@
         });
 
         $('#jstree-container').jstree('destroy').jstree({
-            'core': { 'data': data, 'themes': { 'dots': false, 'icons': true } },
-            'plugins': ['wholerow']
+            'core': { 
+                'data': data, 
+                'check_callback': true, // Essential for allowing modify/create/delete
+                'themes': { 'dots': false, 'icons': true } 
+            },
+            'plugins': ['wholerow', 'contextmenu'],
+            'contextmenu': { 'items': customContextMenu }
         }).on('select_node.jstree', (e, d) => { 
-            if(files[d.node.id] !== undefined) loadFile(d.node.id); 
+            if(files[d.node.id] !== undefined && !d.node.id.endsWith('/')) loadFile(d.node.id); 
         });
     }
 
+    // --- Context Menu Logic ---
+    function customContextMenu(node) {
+        return {
+            "CreateFile": {
+                "separator_before": false, "separator_after": false, "label": "New File",
+                "action": function (obj) {
+                    let name = prompt("Enter file name (e.g., script.js):");
+                    if (name) {
+                        let path = node.id === '#' ? name : (node.id.endsWith('/') ? node.id + name : node.parent + name);
+                        if (!files[path]) {
+                            files[path] = "";
+                            saveToLocal();
+                            renderTree();
+                            loadFile(path);
+                        }
+                    }
+                }
+            },
+            "CreateFolder": {
+                "separator_before": false, "separator_after": true, "label": "New Folder",
+                "action": function (obj) {
+                    let name = prompt("Enter folder name:");
+                    if (name) {
+                        // We append a trailing slash to identify it as a folder in our flat structure
+                        let path = node.id === '#' ? name + '/' : (node.id.endsWith('/') ? node.id + name + '/' : node.parent + name + '/');
+                        files[path] = ""; // Dummy entry to force tree render
+                        saveToLocal();
+                        renderTree();
+                    }
+                }
+            },
+            "Rename": {
+                "separator_before": false, "separator_after": false, "label": "Rename",
+                "action": function (obj) {
+                    let newName = prompt("Enter new name:", node.text);
+                    if (newName && newName !== node.text) {
+                        let oldPath = node.id;
+                        let isFolder = oldPath.endsWith('/');
+                        let basePath = isFolder ? oldPath.substring(0, oldPath.lastIndexOf('/', oldPath.length - 2) + 1) : oldPath.substring(0, oldPath.lastIndexOf('/') + 1);
+                        let newPath = basePath + newName + (isFolder ? '/' : '');
+
+                        if (!isFolder && files[oldPath] !== undefined) {
+                            // Single File
+                            files[newPath] = files[oldPath];
+                            delete files[oldPath];
+                            if(currentPath === oldPath) currentPath = newPath;
+                        } else {
+                            // Folder: Rename prefix for all nested files
+                            Object.keys(files).forEach(p => {
+                                if (p.startsWith(oldPath)) {
+                                    files[p.replace(oldPath, newPath)] = files[p];
+                                    delete files[p];
+                                }
+                            });
+                        }
+                        saveToLocal();
+                        renderTree();
+                        if (!isFolder) loadFile(newPath);
+                    }
+                }
+            },
+            "Delete": {
+                "separator_before": false, "separator_after": false, "label": "Delete",
+                "action": function (obj) {
+                    if (confirm(`Are you sure you want to delete ${node.text}?`)) {
+                        let path = node.id;
+                        if (!path.endsWith('/') && files[path] !== undefined) {
+                            delete files[path];
+                        } else {
+                            Object.keys(files).forEach(p => { if (p.startsWith(path)) delete files[p]; });
+                        }
+                        saveToLocal();
+                        renderTree();
+                        if (currentPath.startsWith(path)) {
+                            editor.setValue("// File deleted");
+                            document.getElementById('currentPath').textContent = "Deleted";
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     function loadFile(path) {
+        if (path === '' || path.endsWith('/')) return; // Don't load folders
+        
         currentPath = path;
         document.getElementById('currentPath').textContent = path.split('/').pop();
         
-        // Map extensions to Monaco languages
         const ext = path.split('.').pop().toLowerCase();
         const languageMap = { 'js': 'javascript', 'html': 'html', 'css': 'css', 'json': 'json' };
         const lang = languageMap[ext] || 'plaintext';
 
         let model = monaco.editor.getModels().find(m => m.uri.path === '/' + path);
         if (!model) {
-            model = monaco.editor.createModel(files[path], lang, monaco.Uri.file(path));
+            model = monaco.editor.createModel(files[path] || "", lang, monaco.Uri.file(path));
         }
         editor.setModel(model);
     }
@@ -209,7 +318,7 @@
     // --- Service Worker Sync & Preview ---
     async function updatePreview() {
         if (!navigator.serviceWorker.controller) {
-            console.warn("Service Worker not ready yet. Please ensure you are running this on a local server (localhost).");
+            console.warn("Service Worker not ready.");
             return;
         }
 
@@ -220,22 +329,21 @@
                 const url = `/virtual-project/${path}?t=${Date.now()}`;
                 
                 document.getElementById('preview').src = url;
-                if (childWindow && !childWindow.closed) {
-                    childWindow.location.href = url;
-                }
+                if (childWindow && !childWindow.closed) childWindow.location.href = url;
+
+                // Reset Sync Button state
+                unsyncedChanges = false;
+                document.getElementById('run-btn').classList.remove('unsynced');
+                document.querySelector('#run-btn span').textContent = "Run Project";
             }
         };
 
-        navigator.serviceWorker.controller.postMessage({ 
-            type: 'UPDATE_FILES', 
-            files: files 
-        }, [msgChannel.port2]);
+        navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files: files }, [msgChannel.port2]);
     }
 
     function previewInNewTab() {
         const path = document.getElementById('browserAddress').value;
         const url = `/virtual-project/${path}?t=${Date.now()}`;
-        // Passing '_blank' native target forces a new tab instead of a popup window
         childWindow = window.open(url, '_blank');
     }
 
@@ -244,8 +352,6 @@
         if (e.data.type === 'CONSOLE_LOG') {
             const div = document.createElement('div');
             div.className = 'log-entry';
-            
-            // Color code based on log type
             if (e.data.logType === 'error') div.style.color = '#f48771';
             else if (e.data.logType === 'warn') div.style.color = '#cca700';
             else div.style.color = '#cccccc';
@@ -253,18 +359,11 @@
             div.textContent = `> ${e.data.msg}`;
             const consoleArea = document.getElementById('console-area');
             consoleArea.appendChild(div);
-            // Auto-scroll to bottom
             consoleArea.scrollTop = consoleArea.scrollHeight;
         }
     });
 
-    // --- Service Worker Registration ---
-    if ('serviceWorker' in navigator) {
-        // Ensure sw.js is in the root or same directory for scoping
-        navigator.serviceWorker.register('./sw.js', {scope: '/'}).catch(err => {
-            console.error('SW Registration Failed:', err);
-        });
-    }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', {scope: '/'});
 </script>
 </body>
 </html>
