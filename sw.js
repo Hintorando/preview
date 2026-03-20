@@ -3,7 +3,10 @@ let virtualFiles = {};
 self.addEventListener('message', (event) => {
     if (event.data.type === 'UPDATE_FILES') {
         virtualFiles = event.data.files;
-        if (event.ports && event.ports[0]) event.ports[0].postMessage('ACK');
+        // Tell the IDE we are ready!
+        if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage('ACK');
+        }
     }
 });
 
@@ -12,21 +15,19 @@ self.addEventListener('fetch', (event) => {
     const marker = '/virtual-project/';
 
     if (url.pathname.includes(marker)) {
-        // Strip marker and query strings
-        const path = url.pathname.split(marker)[1].split('?')[0] || 'index.html';
-        
-        // Find content or default to empty string if it's a "folder" entry
+        const path = url.pathname.split(marker)[1] || 'index.html';
         let content = virtualFiles[path];
 
-        if (content !== undefined) {
+        if (content) {
             const ext = path.split('.').pop().toLowerCase();
+            
+            // CONSOLE FIX: If it's the HTML file, inject the hook immediately
             if (ext === 'html') {
-                const hook = `<script>
+                const hook = `
+                <script>
                     (function() {
                         const sendLog = (type, args) => {
-                            window.parent.postMessage({ type: 'CONSOLE_LOG', logType: type, msg: Array.from(args).map(a => 
-                                typeof a === 'object' ? JSON.stringify(a) : a
-                            ).join(' ') }, '*');
+                            window.parent.postMessage({ type: 'CONSOLE_LOG', logType: type, msg: Array.from(args).join(' ') }, '*');
                         };
                         ['log','warn','error'].forEach(t => {
                             const orig = console[t];
