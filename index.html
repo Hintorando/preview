@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ultimate Virtual IDE</title>
+    <title>Virtual IDE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
     <style>
         :root { --bg: #282c34; --sidebar: #21252b; --border: #181a1f; --text: #abb2bf; --accent: #61afef; }
@@ -16,6 +16,8 @@
         #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
         #monaco-editor { flex: 1; }
         #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; font-family: monospace; padding: 5px; }
+        #preview-container { background: white; display: flex; flex-direction: column; }
+        iframe { flex: 1; border: none; background: white; }
         
         .toolbar { padding: 8px; background: var(--sidebar); font-size: 11px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
         .run-btn { background: var(--accent); color: #282c34; border: none; padding: 8px 15px; font-weight: bold; cursor: pointer; border-radius: 3px; }
