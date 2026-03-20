@@ -1,8 +1,14 @@
 // sw.js
 let virtualFiles = {};
 
-self.addEventListener('message', (e) => {
-    if (e.data.type === 'UPDATE_FILES') virtualFiles = e.data.files;
+self.addEventListener('message', (event) => {
+    if (event.data.type === 'UPDATE_FILES') {
+        virtualFiles = event.data.files;
+        // Tell the IDE we are ready!
+        if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage('ACK');
+        }
+    }
 });
 
 self.addEventListener('fetch', (event) => {
