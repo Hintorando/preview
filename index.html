@@ -145,7 +145,7 @@
     function previewInNewTab() {
         const path = document.getElementById('browserAddress').value;
         const url = `./virtual-project/${path}?t=${Date.now()}`;
-        childWindow = window.open(url, 'VirtualPreview', 'width=1000,height=800');
+        childWindow = window.open(url, 'preview');
     }
 
     // Enter Key listener for address bar
