@@ -1,52 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pro IDE + Console</title>
+    <title>Ultimate Virtual IDE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
     <style>
-        :root { --bg: #282c34; --sidebar: #21252b; --border: #181a1f; --text: #abb2bf; --accent: #61afef; --error: #e06c75; --warn: #d19a66; }
-        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 250px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
+        :root { --bg: #282c34; --sidebar: #21252b; --border: #181a1f; --text: #abb2bf; --accent: #61afef; }
+        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 260px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
         
         #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .tree-item { padding: 6px 10px; cursor: pointer; display: flex; align-items: center; font-size: 13px; gap: 8px; }
-        .tree-item.active { background: #3e4451; box-shadow: inset 3px 0 0 var(--accent); }
+        .folder { font-weight: bold; color: #d19a66; padding: 4px 10px; font-size: 13px; }
+        .file { padding: 4px 25px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+        .file:hover { background: #2c313a; }
+        .file.active { background: #3e4451; color: var(--accent); }
         
         #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
         #monaco-editor { flex: 1; }
+        #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; font-family: monospace; padding: 5px; }
         
-        /* Console Styles */
-        #console-area { height: 200px; background: #1e2127; border-top: 1px solid var(--border); overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; }
-        .log { padding: 4px 10px; border-bottom: 1px solid #2c313a; white-space: pre-wrap; }
-        .log-error { color: var(--error); background: rgba(224, 108, 117, 0.1); }
-        .log-warn { color: var(--warn); }
-        
-        #preview-container { background: white; display: flex; flex-direction: column; }
-        iframe { flex: 1; border: none; background: white; }
-        
-        .toolbar { padding: 8px 12px; background: var(--sidebar); font-size: 11px; text-transform: uppercase; color: #5c6370; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
-        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 10px; width: 100%; font-weight: bold; cursor: pointer; }
+        .toolbar { padding: 8px; background: var(--sidebar); font-size: 11px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 8px 15px; font-weight: bold; cursor: pointer; border-radius: 3px; }
+        .external-link { color: var(--accent); text-decoration: none; font-size: 10px; border: 1px solid var(--accent); padding: 2px 5px; border-radius: 3px; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div class="toolbar">Explorer</div>
-    <div id="fileTree" style="flex:1;"></div>
-    <div style="padding:10px">
-        <input type="text" id="pathInput" placeholder="path/to/file.js" style="width:90%; background:#1b1d23; border:1px solid var(--border); color:white; padding:5px; margin-bottom:5px;">
+    <div class="toolbar">FILES</div>
+    <div id="fileTree" style="flex:1; overflow-y:auto; padding-top:10px;"></div>
+    <div style="padding:10px; border-top:1px solid var(--border)">
+        <input type="text" id="pathInput" placeholder="folder/file.js" style="width:90%; background:#1b1d23; border:1px solid var(--border); color:white; padding:5px; margin-bottom:10px;">
         <button class="run-btn" onclick="updatePreview()">▶ RUN PROJECT</button>
     </div>
 </div>
 
 <div id="editor-container">
-    <div class="toolbar">Editor: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
+    <div class="toolbar">EDITOR: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
     <div id="monaco-editor"></div>
-    <div class="toolbar">Console <span onclick="document.getElementById('console-area').innerHTML=''" style="cursor:pointer">[Clear]</span></div>
+    <div class="toolbar">CONSOLE</div>
     <div id="console-area"></div>
 </div>
 
 <div id="preview-container">
-    <div class="toolbar" style="background:#eee; color:#333;">Preview</div>
+    <div class="toolbar" style="background:#eee; color:#333;">
+        LIVE PREVIEW
+        <a id="openTab" target="_blank" class="external-link">OPEN IN NEW TAB ↗</a>
+    </div>
     <iframe id="preview"></iframe>
 </div>
 
@@ -54,8 +52,9 @@
     let editor;
     let currentPath = 'index.html';
     let files = {
-        'index.html': '<html><body><h1>Console Ready</h1><script src="app.js"><\/script></body></html>',
-        'app.js': 'console.log("System Online...");\nconsole.warn("Testing warnings");'
+        'index.html': '<html><body><h1>Recursive Tree</h1><script src="js/main.js"><\/script></body></html>',
+        'js/main.js': 'console.log("Deep file loaded!");\nconsole.log("Check the console immediately!");',
+        'css/style.css': 'body { background: #282c34; }'
     };
 
     require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
@@ -65,35 +64,61 @@
             rules: [{ token: 'keyword', foreground: 'c678dd' }],
             colors: { 'editor.background': '#282c34', 'editor.lineHighlightBackground': '#2c313a' }
         });
-
-        editor = monaco.editor.create(document.getElementById('monaco-editor'), {
-            theme: 'one-dark', automaticLayout: true, fontSize: 14, minimap: { enabled: false }
-        });
-
+        editor = monaco.editor.create(document.getElementById('monaco-editor'), { theme: 'one-dark', automaticLayout: true, fontSize: 14 });
         editor.onDidChangeModelContent(() => { files[currentPath] = editor.getValue(); });
         renderTree();
         loadFile('index.html');
     });
 
+    // RECURSIVE TREE LOGIC
     function renderTree() {
-        const tree = document.getElementById('fileTree');
-        tree.innerHTML = '';
+        const treeElement = document.getElementById('fileTree');
+        treeElement.innerHTML = '';
+        const structure = {};
+
+        // Convert flat paths to nested object
         Object.keys(files).forEach(path => {
-            const div = document.createElement('div');
-            div.className = `tree-item ${path === currentPath ? 'active' : ''}`;
-            div.innerHTML = `<span>📄 ${path}</span>`;
-            div.onclick = () => loadFile(path);
-            tree.appendChild(div);
+            const parts = path.split('/');
+            let current = structure;
+            parts.forEach((part, i) => {
+                if (i === parts.length - 1) current[part] = path;
+                else {
+                    current[part] = current[part] || {};
+                    current = current[part];
+                }
+            });
         });
+
+        const buildHTML = (obj, container) => {
+            Object.keys(obj).sort().forEach(key => {
+                const val = obj[key];
+                if (typeof val === 'string') {
+                    const el = document.createElement('div');
+                    el.className = `file ${val === currentPath ? 'active' : ''}`;
+                    el.textContent = '📄 ' + key;
+                    el.onclick = () => loadFile(val);
+                    container.appendChild(el);
+                } else {
+                    const folderEl = document.createElement('div');
+                    folderEl.className = 'folder';
+                    folderEl.textContent = '📁 ' + key;
+                    container.appendChild(folderEl);
+                    const subContainer = document.createElement('div');
+                    subContainer.style.marginLeft = '10px';
+                    container.appendChild(subContainer);
+                    buildHTML(val, subContainer);
+                }
+            });
+        };
+        buildHTML(structure, treeElement);
     }
 
     function loadFile(path) {
         currentPath = path;
-        document.getElementById('currentPath').textContent = path;
         const ext = path.split('.').pop();
         const lang = { js: 'javascript', html: 'html', css: 'css' }[ext] || 'plaintext';
-        const model = monaco.editor.createModel(files[path], lang);
-        editor.setModel(model);
+        editor.setModel(monaco.editor.createModel(files[path], lang));
+        document.getElementById('currentPath').textContent = path;
         renderTree();
     }
 
@@ -101,29 +126,23 @@
         if (!navigator.serviceWorker.controller) return;
         navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files });
         
-        const iframe = document.getElementById('preview');
-        iframe.src = `./virtual-project/index.html?t=${Date.now()}`;
-
-        iframe.onload = () => {
-            const win = iframe.contentWindow;
-            ['log', 'error', 'warn'].forEach(type => {
-                const original = win.console[type];
-                win.console[type] = (...args) => {
-                    logToUI(args.join(' '), type);
-                    original.apply(win.console, args);
-                };
-            });
-        };
+        const timestamp = Date.now();
+        const url = `./virtual-project/index.html?t=${timestamp}`;
+        document.getElementById('preview').src = url;
+        document.getElementById('openTab').href = url;
     }
 
-    function logToUI(msg, type) {
-        const area = document.getElementById('console-area');
-        const div = document.createElement('div');
-        div.className = `log log-${type}`;
-        div.textContent = `> ${msg}`;
-        area.appendChild(div);
-        area.scrollTop = area.scrollHeight;
-    }
+    // Capture logs via postMessage (sent by the SW-injected script)
+    window.addEventListener('message', e => {
+        if (e.data.type === 'CONSOLE_LOG') {
+            const area = document.getElementById('console-area');
+            const div = document.createElement('div');
+            div.style.color = e.data.logType === 'error' ? '#e06c75' : e.data.logType === 'warn' ? '#d19a66' : '#abb2bf';
+            div.textContent = `> [${e.data.logType}] ${e.data.msg}`;
+            area.appendChild(div);
+            area.scrollTop = area.scrollHeight;
+        }
+    });
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
