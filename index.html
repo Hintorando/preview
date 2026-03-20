@@ -1,197 +1,168 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Lite IDE</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vanillatree@0.3.0/vanillatree.css">
-    <script src="https://cdn.jsdelivr.net/npm/vanillatree@0.3.0/vanillatree.min.js"></script>
+    <title>ide thingy</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 
     <style>
-        :root { --bg: #1e1e1e; --sidebar: #252526; --border: #333333; --text: #cccccc; --accent: #0e639c; }
-        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 260px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
+        :root { 
+            --bg: #282c34; --sidebar: #21252b; --border: #181a1f; 
+            --text: #abb2bf; --accent: #61afef; --hover: #2c313a; --select: #3e4451;
+        }
+        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 280px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
         
-        /* Sidebar Layout */
+        /* Sidebar & Tree Styling */
         #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        .sidebar-header { padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
-        .sidebar-tools { display: flex; gap: 8px; }
-        .tool-icon { cursor: pointer; opacity: 0.7; transition: 0.2s; font-size: 16px; }
-        .tool-icon:hover { opacity: 1; color: #fff; }
+        #jstree-container { flex: 1; overflow: auto; padding: 10px; font-size: 13px; background: var(--sidebar); }
+        
+        /* FIX: Deep Theme Overrides for jsTree */
+        .jstree-default .jstree-anchor { color: var(--text) !important; }
+        .jstree-default .jstree-hovered { background: var(--hover) !important; border-radius: 4px; box-shadow: none !important; }
+        .jstree-default .jstree-clicked { background: var(--select) !important; border-radius: 4px; box-shadow: none !important; color: white !important; }
+        .jstree-default .jstree-icon:empty { filter: invert(0.8); } /* Makes folder arrows visible on dark */
 
-        /* VanillaTree Styling Override */
-        #tree { flex: 1; overflow: auto; padding: 5px; }
-        .vtree-item { color: var(--text); font-size: 13px; padding: 4px 8px; border-radius: 3px; cursor: pointer; }
-        .vtree-item-selected { background: var(--accent) !important; color: white; }
-        .vtree-item:hover:not(.vtree-item-selected) { background: #2a2d2e; }
-
-        /* Editor & UI */
         #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
         #monaco-editor { flex: 1; }
-        #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; padding: 10px; font-family: monospace; font-size: 12px; }
-        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #2c313a; }
+        
+        #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; }
+        .log-entry { padding: 3px 10px; border-bottom: 1px solid #2c313a; }
 
         #preview-container { background: white; display: flex; flex-direction: column; }
-        .browser-bar { background: #eee; padding: 8px; display: flex; gap: 8px; border-bottom: 1px solid #ccc; }
-        .address-input { flex: 1; padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; }
-        iframe { flex: 1; border: none; }
-        .run-btn { background: var(--accent); color: white; border: none; padding: 10px; margin: 10px; cursor: pointer; border-radius: 4px; }
+        .browser-bar { background: #eee; padding: 5px 10px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid #ccc; }
+        .address-input { flex: 1; padding: 4px 12px; border: 1px solid #ccc; border-radius: 20px; font-size: 12px; }
+
+        .toolbar { padding: 8px 12px; background: var(--sidebar); font-size: 11px; text-transform: uppercase; color: #5c6370; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        .action-btn { cursor: pointer; color: var(--accent); }
+        .action-btn:hover { text-decoration: underline; }
+        
+        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 10px; margin: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; }
+        .run-btn:active { transform: scale(0.98); background: #528bff; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div class="sidebar-header">
-        <span style="font-size: 11px; font-weight: bold; text-transform: uppercase;">Explorer</span>
-        <div class="sidebar-tools">
-            <span class="tool-icon" onclick="createNewItem(false)" title="New File">📄+</span>
-            <span class="tool-icon" onclick="createNewItem(true)" title="New Folder">📁+</span>
-        </div>
-    </div>
-    <div id="tree"></div>
+    <div class="toolbar">Explorer</div>
+    <div id="jstree-container"></div>
+    <input type="text" id="pathInput" placeholder="folder/file.js" style="margin: 0 10px; background:#1b1d23; border:1px solid var(--border); color:white; padding:6px;">
     <button class="run-btn" onclick="updatePreview()">▶ RUN PROJECT</button>
 </div>
 
 <div id="editor-container">
-    <div style="padding:8px; background:var(--sidebar); font-size:12px;">Editing: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
+    <div class="toolbar">Editor: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
     <div id="monaco-editor"></div>
+    <div class="toolbar">
+        Console 
+        <span class="action-btn" onclick="document.getElementById('console-area').innerHTML=''">Clear</span>
+    </div>
     <div id="console-area"></div>
 </div>
 
 <div id="preview-container">
     <div class="browser-bar">
+        <span style="font-size:11px; color:#999">/virtual/</span>
         <input type="text" id="browserAddress" class="address-input" value="index.html">
-        <button onclick="window.open(document.getElementById('preview').src, '_blank')" style="font-size:11px">New Tab</button>
+        <span class="action-btn" style="font-size:11px;" onclick="previewInNewTab()">NEW TAB ↗</span>
     </div>
     <iframe id="preview"></iframe>
 </div>
 
 <script>
-    let editor, tree;
+    let editor, childWindow;
     let currentPath = 'index.html';
-    let files = JSON.parse(localStorage.getItem('v-ide-files')) || {
-        'index.html': '<html><body><h1>Hello World</h1><script src="app.js"><\/script></body></html>',
-        'app.js': 'console.log("App loaded!");'
+    let files = {
+        'index.html': '<html><body style="background:#282c34;color:white;text-align:center"><h1>Preview Loaded</h1><script src="app.js"><\/script></body></html>',
+        'app.js': 'console.log("System Sync Complete.");'
     };
 
-    // Initialize VanillaTree
-    tree = new VanillaTree('#tree', {
-        contextmenu: [
-            { label: 'Delete', action: (id) => deleteItem(id) },
-            { label: 'Rename', action: (id) => renameItem(id) }
-        ]
-    });
-
-    document.getElementById('tree').addEventListener('vtree-select', (e) => {
-        const path = e.detail.id;
-        if (files[path] !== undefined && !path.endsWith('/')) {
-            loadFile(path);
-        }
-    });
-
-    function rebuildTree() {
-        const treeEl = document.getElementById('tree');
-        treeEl.innerHTML = ''; // Clear
-        
-        // Sort paths to ensure parents are created before children
-        const paths = Object.keys(files).sort();
-        
-        paths.forEach(path => {
-            const parts = path.split('/').filter(Boolean);
-            let currentPathBuild = '';
-            
-            parts.forEach((part, index) => {
-                const parent = currentPathBuild;
-                const isLast = index === parts.length - 1;
-                const isFolder = !isLast || path.endsWith('/');
-                currentPathBuild += part + (isFolder ? '/' : '');
-                
-                // Add to tree if it doesn't exist
-                try {
-                    tree.add({
-                        label: part,
-                        id: currentPathBuild,
-                        parent: parent || undefined,
-                        opened: true
-                    });
-                } catch(e) {} // Ignore duplicates
-            });
+    // Initialize Monaco
+    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+        monaco.editor.defineTheme('one-dark', {
+            base: 'vs-dark', inherit: true,
+            rules: [{ token: 'keyword', foreground: 'c678dd' }],
+            colors: { 'editor.background': '#282c34', 'editor.lineHighlightBackground': '#2c313a' }
         });
-    }
-
-    function createNewItem(isFolder) {
-        let name = prompt(`Enter ${isFolder ? 'folder' : 'file'} name:`);
-        if (!name) return;
+        editor = monaco.editor.create(document.getElementById('monaco-editor'), { theme: 'one-dark', automaticLayout: true });
+        editor.onDidChangeModelContent(() => { files[currentPath] = editor.getValue(); });
         
-        const selected = tree.getSelectedNodes()[0];
-        let prefix = '';
-        if (selected) {
-            prefix = selected.id.endsWith('/') ? selected.id : selected.id.substring(0, selected.id.lastIndexOf('/') + 1);
-        }
-        
-        const newPath = prefix + name + (isFolder ? '/' : '');
-        files[newPath] = isFolder ? null : "";
-        save();
-        rebuildTree();
-        if(!isFolder) loadFile(newPath);
-    }
+        renderTree();
+        loadFile('index.html');
+    });
 
-    function deleteItem(id) {
-        if(confirm(`Delete ${id}?`)) {
-            Object.keys(files).forEach(p => { if(p.startsWith(id)) delete files[p]; });
-            save();
-            rebuildTree();
-        }
+    function renderTree() {
+        const data = Object.keys(files).map(path => ({
+            id: path, parent: path.includes('/') ? path.substring(0, path.lastIndexOf('/')) || '#' : '#',
+            text: path.split('/').pop(), icon: path.endsWith('.html') ? '📄' : '⚙️'
+        }));
+        
+        // Ensure parent folders exist in the data
+        Object.keys(files).forEach(path => {
+            let parts = path.split('/');
+            for(let i=0; i<parts.length-1; i++) {
+                let folderId = parts.slice(0, i+1).join('/');
+                if(!data.find(n => n.id === folderId)) {
+                    data.push({ id: folderId, parent: i===0 ? '#' : parts.slice(0, i).join('/'), text: parts[i], icon: 'jstree-folder' });
+                }
+            }
+        });
+
+        $('#jstree-container').jstree('destroy').jstree({
+            'core': { 'data': data, 'themes': { 'dots': false } },
+            'plugins': ['wholerow']
+        }).on('select_node.jstree', (e, d) => { if(files[d.node.id] !== undefined) loadFile(d.node.id); });
     }
 
     function loadFile(path) {
         currentPath = path;
         document.getElementById('currentPath').textContent = path;
-        const ext = path.split('.').pop();
-        const lang = { 'js': 'javascript', 'html': 'html', 'css': 'css' }[ext] || 'plaintext';
-        
-        if (editor) {
-            const model = monaco.editor.createModel(files[path], lang);
-            editor.setModel(model);
-        }
+        const model = monaco.editor.getModels().find(m => m.uri.path === path) || 
+                      monaco.editor.createModel(files[path], undefined, monaco.Uri.file(path));
+        editor.setModel(model);
     }
 
-    function save() { localStorage.setItem('v-ide-files', JSON.stringify(files)); }
-
-    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-    require(['vs/editor/editor.main'], function () {
-        editor = monaco.editor.create(document.getElementById('monaco-editor'), {
-            theme: 'vs-dark',
-            automaticLayout: true,
-            value: files[currentPath]
-        });
-        editor.onDidChangeModelContent(() => {
-            files[currentPath] = editor.getValue();
-            save();
-        });
-        rebuildTree();
-    });
-
+    // FIX: PROPER SYNCING
+    // We use a MessageChannel to wait for the SW to confirm it received the files
     async function updatePreview() {
-        if (!navigator.serviceWorker.controller) return alert("Please refresh the page to activate the preview engine.");
-        const mc = new MessageChannel();
-        mc.port1.onmessage = () => {
-            const target = document.getElementById('browserAddress').value;
-            document.getElementById('preview').src = `/virtual-project/${target}?t=${Date.now()}`;
+        if (!navigator.serviceWorker.controller) return alert("SW not ready");
+
+        const msgChannel = new MessageChannel();
+        msgChannel.port1.onmessage = (event) => {
+            if (event.data === 'ACK') {
+                // Now that we KNOW the SW has the files, refresh the iframe
+                const path = document.getElementById('browserAddress').value;
+                const url = `./preview/virtual-project/${path}?t=${Date.now()}`;
+                document.getElementById('preview').src = url;
+                if (childWindow && !childWindow.closed) childWindow.location.href = url;
+            }
         };
-        navigator.serviceWorker.controller.postMessage({ type: 'UPDATE_FILES', files }, [mc.port2]);
+
+        navigator.serviceWorker.controller.postMessage({ 
+            type: 'UPDATE_FILES', 
+            files: files 
+        }, [msgChannel.port2]);
+    }
+
+    function previewInNewTab() {
+        const path = document.getElementById('browserAddress').value;
+        const url = `./preview/virtual-project/${path}?t=${Date.now()}`;
+        childWindow = window.open(url, 'VirtualPreview', 'width=1000,height=800');
     }
 
     window.addEventListener('message', e => {
         if (e.data.type === 'CONSOLE_LOG') {
             const div = document.createElement('div');
             div.className = 'log-entry';
-            div.style.color = e.data.logType === 'error' ? '#f48771' : '#abb2bf';
-            div.textContent = `[${e.data.logType}] ${e.data.msg}`;
+            div.style.color = e.data.logType === 'error' ? '#e06c75' : '#abb2bf';
+            div.textContent = `> ${e.data.msg}`;
             document.getElementById('console-area').appendChild(div);
         }
     });
 
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', {scope: '/'});
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', {scope: '/'});
 </script>
 </body>
 </html>
