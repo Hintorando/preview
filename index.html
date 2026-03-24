@@ -135,7 +135,7 @@
             if (event.data === 'ACK') {
                 // Now that we KNOW the SW has the files, refresh the iframe
                 const path = document.getElementById('browserAddress').value;
-                const url = `./preview/virtual-project/${path}?t=${Date.now()}`;
+                const url = `./virtual-project/${path}?t=${Date.now()}`;
                 document.getElementById('preview').src = url;
                 if (childWindow && !childWindow.closed) childWindow.location.href = url;
             }
@@ -149,7 +149,7 @@
 
     function previewInNewTab() {
         const path = document.getElementById('browserAddress').value;
-        const url = `./preview/virtual-project/${path}?t=${Date.now()}`;
+        const url = `./virtual-project/${path}?t=${Date.now()}`;
         childWindow = window.open(url, 'VirtualPreview', 'width=1000,height=800');
     }
 
