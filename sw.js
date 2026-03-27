@@ -1,46 +1,45 @@
-let virtualFiles = {};
+// sw.js
+const DB_NAME = 'IDE_Storage';
+const STORE_NAME = 'scripts';
 
-self.addEventListener('message', (event) => {
-    if (event.data.type === 'UPDATE_FILES') {
-        virtualFiles = event.data.files;
-        // Tell the IDE we are ready!
-        if (event.ports && event.ports[0]) {
-            event.ports[0].postMessage('ACK');
-        }
-    }
-});
+// Helper to get user code from IndexedDB
+async function getUserCode() {
+  return new Promise((resolve) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => e.target.result.createObjectStore(STORE_NAME);
+    request.onsuccess = (e) => {
+      const db = e.target.result;
+      const transaction = db.transaction(STORE_NAME, 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const getReq = store.get('user-sw-logic');
+      getReq.onsuccess = () => resolve(getReq.result);
+    };
+    request.onerror = () => resolve(null);
+  });
+}
+
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => self.clients.claim());
 
 self.addEventListener('fetch', (event) => {
-    const url = new URL(event.request.url);
-    const marker = '/virtual-project/';
+  // We only want to intercept dummy API calls, not our own IDE files
+  if (event.request.url.includes('/api/')) {
+    event.respondWith(
+      (async () => {
+        const userCode = await getUserCode();
+        if (!userCode) return new Response("No user code found in IDE storage.");
 
-    if (url.pathname.includes(marker)) {
-        const path = url.pathname.split(marker)[1] || 'index.html';
-        let content = virtualFiles[path];
-
-        if (content) {
-            const ext = path.split('.').pop().toLowerCase();
-            
-            // CONSOLE FIX: If it's the HTML file, inject the hook immediately
-            if (ext === 'html') {
-                const hook = `
-                <script>
-                    (function() {
-                        const sendLog = (type, args) => {
-                            window.parent.postMessage({ type: 'CONSOLE_LOG', logType: type, msg: Array.from(args).join(' ') }, '*');
-                        };
-                        ['log','warn','error'].forEach(t => {
-                            const orig = console[t];
-                            console[t] = function() { sendLog(t, arguments); orig.apply(console, arguments); };
-                        });
-                        window.onerror = (m, s, l, c, e) => { sendLog('error', [m + ' at line ' + l]); };
-                    })();
-                <\/script>`;
-                content = hook + content;
-            }
-
-            const mime = { 'html': 'text/html', 'js': 'text/javascript', 'css': 'text/css' }[ext] || 'text/plain';
-            event.respondWith(new Response(content, { headers: { 'Content-Type': mime } }));
+        try {
+          // Create a function from the user's string
+          // We pass 'event' and 'Response' so they can use them
+          const userHandler = new Function('event', 'Response', userCode);
+          const result = userHandler(event, Response);
+          
+          return result instanceof Response ? result : new Response("User script didn't return a Response object.");
+        } catch (err) {
+          return new Response("Error in User Script: " + err.stack, { status: 500 });
         }
-    }
+      })()
+    );
+  }
 });
