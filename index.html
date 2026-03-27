@@ -1,169 +1,81 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ide thingy</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/themes/default/style.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.12/jstree.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-
+    <title>Static SW IDE</title>
     <style>
-        :root { 
-            --bg: #282c34; --sidebar: #21252b; --border: #181a1f; 
-            --text: #abb2bf; --accent: #61afef; --hover: #2c313a; --select: #3e4451;
-        }
-        body { font-family: 'Segoe UI', sans-serif; display: grid; grid-template-columns: 280px 1fr 1fr; height: 100vh; margin: 0; background: var(--bg); color: var(--text); overflow: hidden; }
-        
-        /* Sidebar & Tree Styling */
-        #sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-        #jstree-container { flex: 1; overflow: auto; padding: 10px; font-size: 13px; background: var(--sidebar); }
-        
-        /* FIX: Deep Theme Overrides for jsTree */
-        .jstree-default .jstree-anchor { color: var(--text) !important; }
-        .jstree-default .jstree-hovered { background: var(--hover) !important; border-radius: 4px; box-shadow: none !important; }
-        .jstree-default .jstree-clicked { background: var(--select) !important; border-radius: 4px; box-shadow: none !important; color: white !important; }
-        .jstree-default .jstree-icon:empty { filter: invert(0.8); } /* Makes folder arrows visible on dark */
-
-        #editor-container { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-        #monaco-editor { flex: 1; }
-        
-        #console-area { height: 180px; background: #1b1d23; border-top: 1px solid var(--border); overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; }
-        .log-entry { padding: 3px 10px; border-bottom: 1px solid #2c313a; }
-
-        #preview-container { background: white; display: flex; flex-direction: column; }
-        #preview { flex: 1; }
-        .browser-bar { background: #eee; padding: 5px 10px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid #ccc; }
-        .address-input { flex: 1; padding: 4px 12px; border: 1px solid #ccc; border-radius: 20px; font-size: 12px; }
-
-        .toolbar { padding: 8px 12px; background: var(--sidebar); font-size: 11px; text-transform: uppercase; color: #5c6370; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
-        .action-btn { cursor: pointer; color: var(--accent); }
-        .action-btn:hover { text-decoration: underline; }
-        
-        .run-btn { background: var(--accent); color: #282c34; border: none; padding: 10px; margin: 10px; font-weight: bold; cursor: pointer; border-radius: 4px; transition: 0.2s; }
-        .run-btn:active { transform: scale(0.98); background: #528bff; }
+        body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: white; }
+        textarea { width: 100%; height: 300px; background: #2d2d2d; color: #9cdcfe; border: 1px solid #444; padding: 10px; font-family: monospace; }
+        button { padding: 10px 20px; background: #007acc; color: white; border: none; cursor: pointer; margin-top: 10px; }
+        #status { margin-top: 10px; color: #4ec9b0; }
+        .preview { margin-top: 20px; padding: 10px; border: 1px solid #444; background: #333; }
     </style>
 </head>
 <body>
+    <h1>Mini SW IDE</h1>
+    <p>Write your fetch handler below. It must return a <code>Response</code>.</p>
+    
+    <textarea id="code">
+// Intercept /api/hello
+if (event.request.url.endsWith('/api/hello')) {
+  return new Response(JSON.stringify({ message: "Hello from the User Worker!" }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
 
-<div id="sidebar">
-    <div class="toolbar">Explorer</div>
-    <div id="jstree-container"></div>
-    <input type="text" id="pathInput" placeholder="folder/file.js" style="margin: 0 10px; background:#1b1d23; border:1px solid var(--border); color:white; padding:6px;">
-    <button class="run-btn" onclick="updatePreview()">▶ RUN PROJECT</button>
-</div>
+return new Response("Fallback response for other /api/ calls");</textarea>
 
-<div id="editor-container">
-    <div class="toolbar">Editor: <span id="currentPath" style="color:var(--accent)">index.html</span></div>
-    <div id="monaco-editor"></div>
-    <div class="toolbar">
-        Console 
-        <span class="action-btn" onclick="document.getElementById('console-area').innerHTML=''">Clear</span>
-    </div>
-    <div id="console-area"></div>
-</div>
+    <br>
+    <button onclick="saveAndRun()">Save & Apply Logic</button>
+    <div id="status">Ready.</div>
 
-<div id="preview-container">
-    <div class="browser-bar">
-        <span style="font-size:11px; color:#999">/virtual/</span>
-        <input type="text" id="browserAddress" class="address-input" value="index.html">
-        <span class="action-btn" style="font-size:11px;" onclick="previewInNewTab()">NEW TAB ↗</span>
-    </div>
-    <iframe id="preview"></iframe>
-</div>
+    <hr>
+    <h3>Test Your Worker</h3>
+    <button onclick="testFetch()">Fetch /api/hello</button>
+    <div id="output" class="preview">Response will appear here...</div>
 
-<script>
-    let editor, childWindow;
-    let currentPath = 'index.html';
-    let files = {
-        'index.html': '<html><body style="background:#282c34;color:white;text-align:center"><h1>Preview Loaded</h1><script src="app.js"><\/script></body></html>',
-        'app.js': 'console.log("System Sync Complete.");'
-    };
+    <script>
+        const DB_NAME = 'IDE_Storage';
+        const STORE_NAME = 'scripts';
 
-    // Initialize Monaco
-    require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-    require(['vs/editor/editor.main'], function () {
-        monaco.editor.defineTheme('one-dark', {
-            base: 'vs-dark', inherit: true,
-            rules: [{ token: 'keyword', foreground: 'c678dd' }],
-            colors: { 'editor.background': '#282c34', 'editor.lineHighlightBackground': '#2c313a' }
-        });
-        editor = monaco.editor.create(document.getElementById('monaco-editor'), { theme: 'one-dark', automaticLayout: true });
-        editor.onDidChangeModelContent(() => { files[currentPath] = editor.getValue(); });
-        
-        renderTree();
-        loadFile('index.html');
-    });
-
-    function renderTree() {
-        const data = Object.keys(files).map(path => ({
-            id: path, parent: path.includes('/') ? path.substring(0, path.lastIndexOf('/')) || '#' : '#',
-            text: path.split('/').pop(), icon: path.endsWith('.html') ? '📄' : '⚙️'
-        }));
-        
-        // Ensure parent folders exist in the data
-        Object.keys(files).forEach(path => {
-            let parts = path.split('/');
-            for(let i=0; i<parts.length-1; i++) {
-                let folderId = parts.slice(0, i+1).join('/');
-                if(!data.find(n => n.id === folderId)) {
-                    data.push({ id: folderId, parent: i===0 ? '#' : parts.slice(0, i).join('/'), text: parts[i], icon: 'jstree-folder' });
-                }
+        // Initialize DB and Service Worker
+        async function init() {
+            if ('serviceWorker' in navigator) {
+                await navigator.serviceWorker.register('sw.js');
+                document.getElementById('status').innerText = "Service Worker Registered.";
             }
-        });
-
-        $('#jstree-container').jstree('destroy').jstree({
-            'core': { 'data': data, 'themes': { 'dots': false } },
-            'plugins': ['wholerow']
-        }).on('select_node.jstree', (e, d) => { if(files[d.node.id] !== undefined) loadFile(d.node.id); });
-    }
-
-    function loadFile(path) {
-        currentPath = path;
-        document.getElementById('currentPath').textContent = path;
-        const model = monaco.editor.getModels().find(m => m.uri.path === path) || 
-                      monaco.editor.createModel(files[path], undefined, monaco.Uri.file(path));
-        editor.setModel(model);
-    }
-
-    // FIX: PROPER SYNCING
-    // We use a MessageChannel to wait for the SW to confirm it received the files
-    async function updatePreview() {
-        if (!navigator.serviceWorker.controller) return alert("SW not ready");
-
-        const msgChannel = new MessageChannel();
-        msgChannel.port1.onmessage = (event) => {
-            if (event.data === 'ACK') {
-                // Now that we KNOW the SW has the files, refresh the iframe
-                const path = document.getElementById('browserAddress').value;
-                const url = `./virtual-project/${path}?t=${Date.now()}`;
-                document.getElementById('preview').src = url;
-                if (childWindow && !childWindow.closed) childWindow.location.href = url;
-            }
-        };
-
-        navigator.serviceWorker.controller.postMessage({ 
-            type: 'UPDATE_FILES', 
-            files: files 
-        }, [msgChannel.port2]);
-    }
-
-    function previewInNewTab() {
-        const path = document.getElementById('browserAddress').value;
-        const url = `./virtual-project/${path}?t=${Date.now()}`;
-        childWindow = window.open(url, 'VirtualPreview', 'width=1000,height=800');
-    }
-
-    window.addEventListener('message', e => {
-        if (e.data.type === 'CONSOLE_LOG') {
-            const div = document.createElement('div');
-            div.className = 'log-entry';
-            div.style.color = e.data.logType === 'error' ? '#e06c75' : '#abb2bf';
-            div.textContent = `> ${e.data.msg}`;
-            document.getElementById('console-area').appendChild(div);
         }
-    });
 
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', {scope: '/'});
-</script>
+        async function saveAndRun() {
+            const code = document.getElementById('code').value;
+            
+            // Save to IndexedDB
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (e) => e.target.result.createObjectStore(STORE_NAME);
+            request.onsuccess = (e) => {
+                const db = e.target.result;
+                const transaction = db.transaction(STORE_NAME, 'readwrite');
+                transaction.objectStore(STORE_NAME).put(code, 'user-sw-logic');
+                transaction.oncomplete = () => {
+                    document.getElementById('status').innerText = "Logic Updated! (Refreshing Worker...)";
+                    // Force refresh by reloading the page or sending a message
+                    location.reload(); 
+                };
+            };
+        }
+
+        async function testFetch() {
+            const out = document.getElementById('output');
+            out.innerText = "Fetching...";
+            try {
+                const res = await fetch('/api/hello');
+                const text = await res.text();
+                out.innerText = text;
+            } catch (e) {
+                out.innerText = "Fetch failed. Is the SW running?";
+            }
+        }
+
+        init();
+    </script>
 </body>
 </html>
